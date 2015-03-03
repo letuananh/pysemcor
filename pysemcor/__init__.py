@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-def main():
-	print("Hello World")
-	pass
+from model import SemCorTXT, SemCorSQLite
 
-if __name__ == "__main__":
-	main()
+__all__ = ["SemCor"]
