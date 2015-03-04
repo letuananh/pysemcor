@@ -68,6 +68,7 @@ OUTPUT_DIRS = {
 # XML_DIR = os.path.expanduser('./data/')
 XML_DIR = SEMCOR_FIXED_ROOT
 SEMCOR_RAW = os.path.expanduser('./data/semcor_wn30.raw')
+SEMCOR_TAG = os.path.expanduser('./data/semcor_wn30.tag')
 SEMCOR_TXT = os.path.expanduser('./data/semcor_wn30.txt')
 
 def fix_malformed_xml_file(filepathchunks, postfix='.xml'):
@@ -86,14 +87,18 @@ def fix_malformed_xml_file(filepathchunks, postfix='.xml'):
 	with open(output_file_path, 'w') as output_file:
 		output_file.write(soup.prettify())
 
-def convert_file(file_name, semcor_txt, semcor_raw=None):
-	print('Loading %s' %file_name)
-	#root = ET.parse(file_name).getroot()
+def convert_file(file_name, semcor_txt, semcor_raw=None, semcor_tag=None):
+	#print('Loading %s' %file_name)
 
 	tree = etree.iterparse(file_name)
 	for event, element in tree:
 		if event == 'end' and element.tag == 's':
-			# print("Found a sentence. Length = %s" % len(element))
+			fcode = os.path.basename(file_name)
+			fcode = os.path.basename(fcode)[:-4] if fcode.endswith('.xml') else fcode
+			scode = fcode + '-' + str(element.get('snum'))
+			#print("Found a sentence (length = %s) - sid = %s" % (len(element), scode,) )
+			
+			# Generate TAB file with tags
 			tokens = []
 			for token in element:
 				if token.tag == 'wf':
@@ -110,6 +115,7 @@ def convert_file(file_name, semcor_txt, semcor_raw=None):
 			tokens_text = '\t'.join([ x.text + '|' + x.sk for x in tokens])
 			semcor_txt.write(tokens_text + '\n')
 			
+			# Generate raw file
 			if semcor_raw:
 				sentence_text = ' '.join([ x.text for x in tokens ])
 				sentence_text = sentence_text.replace(" , , ", ", ")
@@ -122,13 +128,38 @@ def convert_file(file_name, semcor_txt, semcor_raw=None):
 				sentence_text = sentence_text.replace("( ", "(")			
 				sentence_text = sentence_text.replace(" )", ")")			
 				sentence_text = sentence_text.replace(" n't ", "n't ")			
+				sentence_text = sentence_text.replace("Never_mind_''", "Never_mind_”")			
+				sentence_text = sentence_text.replace("327_U._S._114_''", "327_U._S._114_”")			
+				sentence_text = sentence_text.replace("``", "“")			
+				sentence_text = sentence_text.replace("''", "”")			
 				if sentence_text[-2:] in (' .', ' :', ' ?', ' !'):
 					sentence_text = sentence_text[:-2] + sentence_text[-1]
-					
-				semcor_raw.write(sentence_text.strip() + '\n')
-			#for token in tokens:
-			#	if token.text and token.sk:
-					#semcor_txt.write('%s\t%s\t%s\n' % (token.text, token.sk, sentence_text))
+				sentence_text = sentence_text.strip()
+				
+				# Generate mapping file
+				if semcor_tag:
+					cfrom = 0
+					cto = len(sentence_text)
+					stags = []
+					for token in tokens:
+						tokentext = token.text.replace('``', '“').replace("''", '”')
+						tokenfrom = sentence_text.find(tokentext)
+						if cfrom == 0 and tokenfrom != 0:
+							print("WARNING: Sentence starts at %s instead of 0 - sid = %s [sent[0] is |%s|]" % (tokenfrom, scode, sentence_text[0]))
+						
+						if tokenfrom == -1:
+							print("WARNING: Token not found (%s) in %s" % (token.text,scode))
+						else:
+							if token.sk:
+								stags.append((scode, tokenfrom, tokenfrom + len(token.text),token.sk,token.text,))
+						cfrom = tokenfrom + len(token.text)
+					if cfrom != cto:
+						print("WARNING: Sentence length is expected to be %s but found %s lasttoken=|%s| (sid = %s)" % (cto, cfrom, token.text, scode))
+					for tag in stags:
+						semcor_tag.write('\t'.join([ str(x) for x in tag]) + '\n')
+				# Done!
+				semcor_raw.write(scode + '\t')
+				semcor_raw.write(sentence_text + '\n')
 	
 def fix_data():
 	t = Timer()
@@ -140,18 +171,19 @@ def fix_data():
 			c.count('file')
 
 def gen_text():
-	with open(SEMCOR_RAW, 'w') as semcor_raw:
-		with open(SEMCOR_TXT, 'w') as semcor_txt:
-			semcor_raw.write('# SemCor-WordNet30 Tab version - Prepared by Le Tuan Anh, <tuananh.ke@gmail.com>\n')
-			semcor_raw.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
-			semcor_raw.write('#\n')
-			semcor_txt.write('# SemCor\' raw text - Prepared by Le Tuan Anh, <tuananh.ke@gmail.com>\n')
-			semcor_txt.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
-			semcor_txt.write('#\n')
-			all_files = [ os.path.join(XML_DIR, x) for x in os.listdir(XML_DIR) if os.path.isfile(os.path.join(XML_DIR, x)) ]
-			for file_name in all_files:
-				convert_file(file_name, semcor_txt, semcor_raw)
-				
+	with open(SEMCOR_TAG, 'w') as semcor_tag:
+		with open(SEMCOR_RAW, 'w') as semcor_raw:
+			with open(SEMCOR_TXT, 'w') as semcor_txt:
+				semcor_raw.write('# SemCor-WordNet30 Tab version - Prepared by Le Tuan Anh, <tuananh.ke@gmail.com>\n')
+				semcor_raw.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
+				semcor_raw.write('#\n')
+				semcor_txt.write('# SemCor\' raw text - Prepared by Le Tuan Anh, <tuananh.ke@gmail.com>\n')
+				semcor_txt.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
+				semcor_txt.write('#\n')
+				all_files = [ os.path.join(XML_DIR, x) for x in os.listdir(XML_DIR) if os.path.isfile(os.path.join(XML_DIR, x)) ]
+				for file_name in all_files:
+					convert_file(file_name, semcor_txt, semcor_raw, semcor_tag)
+
 def main():
 	print("Fix SemCor 3rada")
 	print('-'*40)
