@@ -44,6 +44,7 @@ import xml.etree.ElementTree as ET
 from chirptext.leutile import *
 from collections import namedtuple
 from bs4 import BeautifulSoup
+import nltk
 
 TokenInfo = namedtuple("TokenInfo", ['text', 'sk'])
 
@@ -69,6 +70,8 @@ OUTPUT_DIRS = {
 XML_DIR = SEMCOR_FIXED_ROOT
 SEMCOR_RAW = os.path.expanduser('./data/semcor_wn30.raw')
 SEMCOR_TAG = os.path.expanduser('./data/semcor_wn30.tag')
+SS_SK_MAP = os.path.expanduser('./data/sk_map_ss.txt')
+SK_NOTFOUND = os.path.expanduser('./data/sk_notfound.txt')
 SEMCOR_TXT = os.path.expanduser('./data/semcor_wn30.txt')
 
 def fix_malformed_xml_file(filepathchunks, postfix='.xml'):
@@ -141,20 +144,31 @@ def convert_file(file_name, semcor_txt, semcor_raw=None, semcor_tag=None):
 					cfrom = 0
 					cto = len(sentence_text)
 					stags = []
+					strace = []
+					previous_token = ''
 					for token in tokens:
 						tokentext = token.text.replace('``', '“').replace("''", '”')
-						tokenfrom = sentence_text.find(tokentext)
+						if ',' == tokentext and ',' == previous_token:
+							print("WARNING: Duplicate punc (,) at %s" % ("('%s', %d)" % (scode, cfrom),))
+							continue
+						strace.append("looking for '%s' from '%s' - %s" % (tokentext, cfrom, "('%s', %d)" % (scode, cfrom)))
+						tokenfrom = sentence_text.find(tokentext, cfrom)
 						if cfrom == 0 and tokenfrom != 0:
 							print("WARNING: Sentence starts at %s instead of 0 - sid = %s [sent[0] is |%s|]" % (tokenfrom, scode, sentence_text[0]))
-						
 						if tokenfrom == -1:
-							print("WARNING: Token not found (%s) in %s" % (token.text,scode))
+							print("WARNING: Token not found (%s) in %s from %s |%s|" % (tokentext, scode, cfrom, sentence_text))
+							for msg in strace[-4:]:
+								print(msg)
+							return
 						else:
+							cfrom = tokenfrom + len(tokentext)
 							if token.sk:
-								stags.append((scode, tokenfrom, tokenfrom + len(token.text),token.sk,token.text,))
-						cfrom = tokenfrom + len(token.text)
+								stags.append((scode, tokenfrom, cfrom,token.sk,tokentext,))
+						# Finished processing this token
+						previous_token = tokentext
 					if cfrom != cto:
-						print("WARNING: Sentence length is expected to be %s but found %s lasttoken=|%s| (sid = %s)" % (cto, cfrom, token.text, scode))
+						print("WARNING: Sentence length is expected to be %s but found %s lasttoken=|%s| (sid = %s)" % (cto, cfrom, tokentext, scode))
+						print("Debug info: %s" % (stags,))
 					for tag in stags:
 						semcor_tag.write('\t'.join([ str(x) for x in tag]) + '\n')
 				# Done!
@@ -184,6 +198,37 @@ def gen_text():
 				for file_name in all_files:
 					convert_file(file_name, semcor_txt, semcor_raw, semcor_tag)
 
+def sk_to_ss():
+	"""Update sensekey in tag file to synsetID (offset-pos)"""
+	all_sk = set()
+	print("Reading tag file ...")
+	with open(SEMCOR_TAG, 'r') as semcor_tag:
+		lines = [ x.split() for x in semcor_tag.readlines() ]
+	for line in lines:
+		all_sk.add(line[3])
+	print(len(all_sk))
+	
+	print("Loading WordNet ...")
+	from nltk.corpus import wordnet as wn
+	all_sk_notfound = set()
+	with open(SS_SK_MAP, 'w') as mapfile:
+		for sk in all_sk:
+			try:
+				if sk not in all_sk_notfound:
+					ss = wn.lemma_from_key(sk).synset()
+					sid = '%s-%s' % (ss.offset(), ss.pos())
+					mapfile.write('%s\t%s\n' % (sk, sid))
+			except nltk.corpus.reader.wordnet.WordNetError:
+				all_sk_notfound.add(sk)
+			except ValueError:
+				print("Invalid sk: %s" % (sk,))
+				all_sk_notfound.add('[INVALID]\t' + sk)
+	with open(SK_NOTFOUND, 'w') as notfoundfile:
+		for sk in all_sk_notfound:
+			notfoundfile.write(sk)
+			notfoundfile.write('\n')
+	print("Map file has been created")	
+
 def main():
 	print("Fix SemCor 3rada")
 	print('-'*40)
@@ -192,6 +237,8 @@ def main():
 			fix_data()
 		elif sys.argv[1] == 'gentext':
 			gen_text()
+		elif sys.argv[1] == 'ss':
+			sk_to_ss()
 		elif sys.argv[1] == 'all':
 			fix_data()
 			gen_text()
@@ -201,8 +248,10 @@ def main():
 Command list:
 	fixdata: Fix 3rada XML malform
 	gentext: Generate SemCor TXT files
+	ss: Convert sensekey in tag file into synsetID
 	all    : All of the above
 """)
 
 if __name__ == "__main__":
 	main()
+	print("All done!")

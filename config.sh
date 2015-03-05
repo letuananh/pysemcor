@@ -21,4 +21,5 @@ function link_file {
 }
 
 link_folder ~/workspace/beautifulsoup/bs4-python3 bs4
+link_folder ~/workspace/nltk/nltk nltk
 git submodule init && git submodule update
