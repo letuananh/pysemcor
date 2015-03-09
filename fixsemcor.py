@@ -74,6 +74,8 @@ SS_SK_MAP = os.path.expanduser('./data/sk_map_ss.txt')
 SK_NOTFOUND = os.path.expanduser('./data/sk_notfound.txt')
 SEMCOR_TXT = os.path.expanduser('./data/semcor_wn30.txt')
 
+multi_semcor_aligned = ["br-a01", "br-a11", "br-a12", "br-a13", "br-a14", "br-b13", "br-b20", "br-c01", "br-c02", "br-c04", "br-d01", "br-d02", "br-d03", "br-e01", "br-e04", "br-e23", "br-e24", "br-e27", "br-e28", "br-e29", "br-e30", "br-f03", "br-f10", "br-f14", "br-f15", "br-f16", "br-f19", "br-f22", "br-f23", "br-f24", "br-f25", "br-f43", "br-g11", "br-g12", "br-g14", "br-g15", "br-g16", "br-g17", "br-g18", "br-g21", "br-g22", "br-g23", "br-g39", "br-g43", "br-h01", "br-h13", "br-h14", "br-h16", "br-h17", "br-h18", "br-h21", "br-j01", "br-j03", "br-j04", "br-j05", "br-j10", "br-j17", "br-j22", "br-j23", "br-j29", "br-j30", "br-j31", "br-j33", "br-j34", "br-j35", "br-j37", "br-j38", "br-j41", "br-j42", "br-j52", "br-j53", "br-j55", "br-j57", "br-j58", "br-j60", "br-k01", "br-k02", "br-k03", "br-k05", "br-k08", "br-k10", "br-k11", "br-k13", "br-k15", "br-k18", "br-k19", "br-k21", "br-k22", "br-k24", "br-k26", "br-k29", "br-l08", "br-l10", "br-l11", "br-l12", "br-l14", "br-l16", "br-l18", "br-m01", "br-m02", "br-n05", "br-n09", "br-n12", "br-n15", "br-n17", "br-n20", "br-p01", "br-p07", "br-p09", "br-p10", "br-p12", "br-p24", "br-r04", "br-r06", "br-r07", "br-r08"]
+
 def fix_malformed_xml_file(filepathchunks, postfix='.xml'):
 	file_name = filepathchunks[1]
 	input_file_path = os.path.join(*filepathchunks)
@@ -184,7 +186,7 @@ def fix_data():
 			fix_malformed_xml_file(a_file)
 			c.count('file')
 
-def gen_text():
+def gen_text(only_multi_semcor=False):
 	with open(SEMCOR_TAG, 'w') as semcor_tag:
 		with open(SEMCOR_RAW, 'w') as semcor_raw:
 			with open(SEMCOR_TXT, 'w') as semcor_txt:
@@ -195,6 +197,9 @@ def gen_text():
 				semcor_txt.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
 				semcor_txt.write('#\n')
 				all_files = [ os.path.join(XML_DIR, x) for x in os.listdir(XML_DIR) if os.path.isfile(os.path.join(XML_DIR, x)) ]
+				if only_multi_semcor:
+					all_files = [ x for x in all_files if os.path.splitext(os.path.basename(x))[0] in multi_semcor_aligned ]
+				print("Processing %s file(s) ..." % len(all_files))
 				for file_name in all_files:
 					convert_file(file_name, semcor_txt, semcor_raw, semcor_tag)
 
@@ -205,7 +210,11 @@ def sk_to_ss():
 	with open(SEMCOR_TAG, 'r') as semcor_tag:
 		lines = [ x.split() for x in semcor_tag.readlines() ]
 	for line in lines:
-		all_sk.add(line[3])
+		sk = line[3]
+		scloc = sk.find(';')
+		if scloc > -1:
+			sk = sk[:scloc] # only consider the first sensekey
+		all_sk.add(sk)
 	print(len(all_sk))
 	
 	print("Loading WordNet ...")
@@ -237,17 +246,22 @@ def main():
 			fix_data()
 		elif sys.argv[1] == 'gentext':
 			gen_text()
+		elif sys.argv[1] == 'ms':
+			gen_text(True)
+			sk_to_ss()
 		elif sys.argv[1] == 'ss':
 			sk_to_ss()
 		elif sys.argv[1] == 'all':
 			fix_data()
 			gen_text()
+			sk_to_ss()
 	else:
 		print("""Usage:
 	python fixsemcor.py [command]
 Command list:
 	fixdata: Fix 3rada XML malform
 	gentext: Generate SemCor TXT files
+	ms: Generate data for multi-semcor
 	ss: Convert sensekey in tag file into synsetID
 	all    : All of the above
 """)
