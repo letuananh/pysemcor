@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 '''
-Fix 3rada's version
+Semcor Toolkit for Python
+
 @author: Le Tuan Anh
 '''
 
@@ -38,6 +39,8 @@ __status__ = "Prototype"
 ########################################################################
 
 import os
+import sys
+import argparse
 import lxml
 from lxml import etree
 import xml.etree.ElementTree as ET
@@ -238,33 +241,38 @@ def sk_to_ss():
 			notfoundfile.write('\n')
 	print("Map file has been created")	
 
+def multi_semcor():
+	gen_text(True)
+	sk_to_ss()
+
 def main():
-	print("Fix SemCor 3rada")
-	print('-'*40)
-	if len(sys.argv) == 2:
-		if sys.argv[1] == 'fixdata':
-			fix_data()
-		elif sys.argv[1] == 'gentext':
-			gen_text()
-		elif sys.argv[1] == 'ms':
-			gen_text(True)
-			sk_to_ss()
-		elif sys.argv[1] == 'ss':
-			sk_to_ss()
-		elif sys.argv[1] == 'all':
-			fix_data()
-			gen_text()
-			sk_to_ss()
+	parser = argparse.ArgumentParser(description="Semcor Python Toolkit")
+	parser.add_argument('action', choices=['fix', 'gen', 'ms', 'ss', 'all'], help='''Task to perform 
+	(fix: Fix Semcor XML data | 
+	gen: Generate Semcor text | 
+	ms: generate Multi-Semcor data | 
+	ss: Convert sensekey in tag file into synsetID |
+	all: all of the above
+	''')
+	group = parser.add_mutually_exclusive_group()
+	group.add_argument("-v", "--verbose", action="store_true")
+	group.add_argument("-q", "--quiet", action="store_true")
+
+	if len(sys.argv) == 1:
+		# User didn't pass any value in, show help
+		parser.print_help()
 	else:
-		print("""Usage:
-	python fixsemcor.py [command]
-Command list:
-	fixdata: Fix 3rada XML malform
-	gentext: Generate SemCor TXT files
-	ms: Generate data for multi-semcor
-	ss: Convert sensekey in tag file into synsetID
-	all    : All of the above
-""")
+		args = parser.parse_args()
+		task_maps = { 
+			'fix' : (fix_data,),
+			'ss'  : (sk_to_ss,),
+			'gen' : (gen_text,),
+			'ms'  : (multi_semcor,),
+			'all' : (fix_data, gen_text, sk_to_ss)
+		}
+		for task in task_maps[args.action]:
+			task()
+	pass
 
 if __name__ == "__main__":
 	main()
