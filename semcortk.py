@@ -247,10 +247,11 @@ def multi_semcor():
 
 def main():
 	parser = argparse.ArgumentParser(description="Semcor Python Toolkit")
-	parser.add_argument('action', choices=['fix', 'gen', 'ms', 'ss', 'all'], help='''Task to perform 
+	parser.add_argument('action', choices=['fix', 'gen', 'ms', 'msall', 'ss', 'all'], help='''Task to perform 
 	(fix: Fix Semcor XML data | 
 	gen: Generate Semcor text | 
 	ms: generate Multi-Semcor data | 
+	msall: Fix Semcor XML data and then generate Multi-Semcor profile  | 
 	ss: Convert sensekey in tag file into synsetID |
 	all: all of the above
 	''')
@@ -268,6 +269,7 @@ def main():
 			'ss'  : (sk_to_ss,),
 			'gen' : (gen_text,),
 			'ms'  : (multi_semcor,),
+			'msall'  : (fix_data, multi_semcor,),
 			'all' : (fix_data, gen_text, sk_to_ss)
 		}
 		for task in task_maps[args.action]:
