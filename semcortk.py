@@ -48,6 +48,7 @@ from chirptext.leutile import *
 from collections import namedtuple
 from bs4 import BeautifulSoup
 import nltk
+import random
 
 TokenInfo = namedtuple("TokenInfo", ['text', 'sk'])
 
@@ -73,6 +74,8 @@ OUTPUT_DIRS = {
 XML_DIR = SEMCOR_FIXED_ROOT
 SEMCOR_RAW = os.path.expanduser('./data/semcor_wn30.raw')
 SEMCOR_TAG = os.path.expanduser('./data/semcor_wn30.tag')
+SEMCOR_LLTP = os.path.expanduser('./data/semcor_lltp.txt')
+SEMCOR_LLDEV = os.path.expanduser('./data/semcor_lldev.txt') # subset of the full Semcor for LeLesk development
 SS_SK_MAP = os.path.expanduser('./data/sk_map_ss.txt')
 SK_NOTFOUND = os.path.expanduser('./data/sk_notfound.txt')
 SEMCOR_TXT = os.path.expanduser('./data/semcor_wn30.txt')
@@ -245,15 +248,75 @@ def multi_semcor():
 	gen_text(True)
 	sk_to_ss()
 
+def generate_lelesk_test_profile():
+	'''Generate test profile for lelesk (new format 31st Mar 2015)
+	'''
+	# Read all senses
+	sensemap = {}
+	with open(SS_SK_MAP, 'r') as mapfile:
+		for mapitem in mapfile:
+			# format: hotshot%1:18:00::	9762509-n
+			parts = [ x.strip() for x in mapitem.split('\t') ]
+			if len(parts) == 2:
+				sk, sid = parts
+				sensemap[sk] = sid
+
+	# Read all tags
+	tagmap = {} # sentence ID > tags list
+	TagInfo = namedtuple('TagInfo', 'sentid cfrom cto sk word'.split())
+	with open(SEMCOR_TAG, 'r') as tags:
+		for tag in tags:
+			# br-k22-1	8	11	not%4:02:00::	not
+			parts = [ x.strip() for x in tag.split('\t') ]
+			if len(parts) == 5:
+				tag = TagInfo(*parts)
+				if tag.sk in sensemap:
+					# there is synset id for this sensekey ...
+					if tag.sentid in tagmap:
+						tagmap[tag.sentid].append(tag)
+					else:
+						tagmap[tag.sentid] = [tag]
+
+	# build test profile
+	sentences = []
+	with open(SEMCOR_RAW, 'r') as lines:
+		for line in lines:
+			if line.startswith('#'):
+				continue
+			else:
+				parts = [ x.strip() for x in line.split('\t') ]
+				if len(parts) == 2:
+					sid, sent = parts
+					if sid in tagmap:
+						print(sent)
+						# found tags
+						for tag in tagmap[sid]:
+							sentences.append((tag.word, sensemap[tag.sk], sent))
+							# print("%s - %s" % (tag.word, sensemap[tag.sk]))
+
+	# write to file
+	with open(SEMCOR_LLTP, 'w') as outputfile:
+		for sentence in sentences:
+			outputfile.write("%s\t%s\t%s\n" % sentence)
+
+	# write dev profile
+	random.seed(31032015)
+	itemids = sorted(random.sample(range(114341), 1000))
+	with open(SEMCOR_LLDEV, 'w') as outputfile:
+		for itemid in itemids:  
+			outputfile.write("%s\t%s\t%s\n" % sentences[itemid])	
+	pass
+
 def main():
 	parser = argparse.ArgumentParser(description="Semcor Python Toolkit")
-	parser.add_argument('action', choices=['fix', 'gen', 'ms', 'msall', 'ss', 'all'], help='''Task to perform 
+	parser.add_argument('action', choices=['fix', 'gen', 'ms', 'msall', 'ss', 'all', 'lltp'], help='''Task to perform 
 	(fix: Fix Semcor XML data | 
 	gen: Generate Semcor text | 
 	ms: generate Multi-Semcor data | 
 	msall: Fix Semcor XML data and then generate Multi-Semcor profile  | 
 	ss: Convert sensekey in tag file into synsetID |
-	all: all of the above
+	all: all of the above |
+	lltp: Generate LeLesk test profile
 	''')
 	group = parser.add_mutually_exclusive_group()
 	group.add_argument("-v", "--verbose", action="store_true")
@@ -270,7 +333,8 @@ def main():
 			'gen' : (gen_text,),
 			'ms'  : (multi_semcor,),
 			'msall'  : (fix_data, multi_semcor,),
-			'all' : (fix_data, gen_text, sk_to_ss)
+			'all' : (fix_data, gen_text, sk_to_ss,),
+			'lltp' : (generate_lelesk_test_profile,)
 		}
 		for task in task_maps[args.action]:
 			task()
