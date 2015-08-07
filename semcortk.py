@@ -72,13 +72,14 @@ OUTPUT_DIRS = {
 }
 # XML_DIR = os.path.expanduser('./data/')
 XML_DIR = SEMCOR_FIXED_ROOT
-SEMCOR_RAW = os.path.expanduser('./data/semcor_wn30.raw')
+SEMCOR_RAW = os.path.expanduser('./data/semcor.txt')
+SEMCOR_TAB = os.path.expanduser('./data/semcor_wn30.csv')
 SEMCOR_TAG = os.path.expanduser('./data/semcor_wn30.tag')
 SEMCOR_LLTP = os.path.expanduser('./data/semcor_lltp.txt')
 SEMCOR_LLDEV = os.path.expanduser('./data/semcor_lldev.txt') # subset of the full Semcor for LeLesk development
 SS_SK_MAP = os.path.expanduser('./data/sk_map_ss.txt')
 SK_NOTFOUND = os.path.expanduser('./data/sk_notfound.txt')
-SEMCOR_TXT = os.path.expanduser('./data/semcor_wn30.txt')
+SEMCOR_TXT = os.path.expanduser('./data/semcor_wn30_tokenized.txt')
 
 multi_semcor_aligned = ["br-a01", "br-a11", "br-a12", "br-a13", "br-a14", "br-b13", "br-b20", "br-c01", "br-c02", "br-c04", "br-d01", "br-d02", "br-d03", "br-e01", "br-e04", "br-e23", "br-e24", "br-e27", "br-e28", "br-e29", "br-e30", "br-f03", "br-f10", "br-f14", "br-f15", "br-f16", "br-f19", "br-f22", "br-f23", "br-f24", "br-f25", "br-f43", "br-g11", "br-g12", "br-g14", "br-g15", "br-g16", "br-g17", "br-g18", "br-g21", "br-g22", "br-g23", "br-g39", "br-g43", "br-h01", "br-h13", "br-h14", "br-h16", "br-h17", "br-h18", "br-h21", "br-j01", "br-j03", "br-j04", "br-j05", "br-j10", "br-j17", "br-j22", "br-j23", "br-j29", "br-j30", "br-j31", "br-j33", "br-j34", "br-j35", "br-j37", "br-j38", "br-j41", "br-j42", "br-j52", "br-j53", "br-j55", "br-j57", "br-j58", "br-j60", "br-k01", "br-k02", "br-k03", "br-k05", "br-k08", "br-k10", "br-k11", "br-k13", "br-k15", "br-k18", "br-k19", "br-k21", "br-k22", "br-k24", "br-k26", "br-k29", "br-l08", "br-l10", "br-l11", "br-l12", "br-l14", "br-l16", "br-l18", "br-m01", "br-m02", "br-n05", "br-n09", "br-n12", "br-n15", "br-n17", "br-n20", "br-p01", "br-p07", "br-p09", "br-p10", "br-p12", "br-p24", "br-r04", "br-r06", "br-r07", "br-r08"]
 
@@ -98,7 +99,7 @@ def fix_malformed_xml_file(filepathchunks, postfix='.xml'):
 	with open(output_file_path, 'w') as output_file:
 		output_file.write(soup.prettify())
 
-def convert_file(file_name, semcor_txt, semcor_raw=None, semcor_tag=None):
+def convert_file(file_name, semcor_txt, semcor_raw=None, semcor_tag=None, semcor_tab=None):
 	#print('Loading %s' %file_name)
 
 	tree = etree.iterparse(file_name)
@@ -117,7 +118,7 @@ def convert_file(file_name, semcor_txt, semcor_raw=None, semcor_tag=None):
 					lexsn = StringTool.strip(token.get('lexsn'))
 					sk = lemma + '%' + lexsn if lemma and lexsn else ''
 					sk = StringTool.strip(sk.replace('\t', ' ').replace('|', ' '))
-					text = StringTool.strip(token.text.replace('\t', ' ').replace('|', ' '))
+					text = StringTool.strip(token.text.replace('\t', ' ').replace('|', ' ').replace('_', ' '))
 					tokens.append(TokenInfo(text, sk))
 				elif token.tag == 'punc':
 					tokens.append(TokenInfo(token.text.strip(), ''))
@@ -127,11 +128,11 @@ def convert_file(file_name, semcor_txt, semcor_raw=None, semcor_tag=None):
 			semcor_txt.write(tokens_text + '\n')
 			
 			# Generate raw file
-			if semcor_raw:
+			if semcor_tab:
 				sentence_text = ' '.join([ x.text for x in tokens ])
 				sentence_text = sentence_text.replace(" , , ", ", ")
 				sentence_text = sentence_text.replace(' , ', ', ').replace('`` ', ' “').replace(" ''", '”')
-				sentence_text = sentence_text.replace(' ! ', '! ').replace(" 'll ", "'ll ").replace(" 've ", "'ve ")			
+				sentence_text = sentence_text.replace(' ! ', '! ').replace(" 'll ", "'ll ").replace(" 've ", "'ve ").replace(" 're ", "'re ").replace(" 'd ", "'d ")			
 				sentence_text = sentence_text.replace(" 's ", "'s ")			
 				sentence_text = sentence_text.replace(" 'm ", "'m ")			
 				sentence_text = sentence_text.replace(" ' ", "' ")			
@@ -180,8 +181,11 @@ def convert_file(file_name, semcor_txt, semcor_raw=None, semcor_tag=None):
 					for tag in stags:
 						semcor_tag.write('\t'.join([ str(x) for x in tag]) + '\n')
 				# Done!
-				semcor_raw.write(scode + '\t')
+				semcor_tab.write(scode + '\t')
+				semcor_tab.write(sentence_text + '\n')
+			if semcor_raw:
 				semcor_raw.write(sentence_text + '\n')
+				pass
 	
 def fix_data():
 	t = Timer()
@@ -193,21 +197,22 @@ def fix_data():
 			c.count('file')
 
 def gen_text(only_multi_semcor=False):
-	with open(SEMCOR_TAG, 'w') as semcor_tag:
-		with open(SEMCOR_RAW, 'w') as semcor_raw:
-			with open(SEMCOR_TXT, 'w') as semcor_txt:
-				semcor_raw.write('# SemCor-WordNet30 Tab version - Prepared by Le Tuan Anh, <tuananh.ke@gmail.com>\n')
-				semcor_raw.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
-				semcor_raw.write('#\n')
-				semcor_txt.write('# SemCor\' raw text - Prepared by Le Tuan Anh, <tuananh.ke@gmail.com>\n')
-				semcor_txt.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
-				semcor_txt.write('#\n')
-				all_files = [ os.path.join(XML_DIR, x) for x in os.listdir(XML_DIR) if os.path.isfile(os.path.join(XML_DIR, x)) ]
-				if only_multi_semcor:
-					all_files = [ x for x in all_files if os.path.splitext(os.path.basename(x))[0] in multi_semcor_aligned ]
-				print("Processing %s file(s) ..." % len(all_files))
-				for file_name in all_files:
-					convert_file(file_name, semcor_txt, semcor_raw, semcor_tag)
+	with open(SEMCOR_TAG, 'w') as semcor_tag, open(SEMCOR_RAW, 'w') as semcor_raw, open(SEMCOR_TXT, 'w') as semcor_txt, open(SEMCOR_TAB, 'w') as semcor_tab:
+		semcor_tab.write('# SemCor-WordNet30 Tab version - Prepared by Le Tuan Anh <tuananh.ke@gmail.com>\n')
+		semcor_tab.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
+		semcor_tab.write('#\n')
+		semcor_raw.write('# SemCor-WordNet30 Tab version - Prepared by Le Tuan Anh <tuananh.ke@gmail.com>\n')
+		semcor_raw.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
+		semcor_raw.write('#\n')
+		semcor_txt.write('# SemCor\' raw text - Prepared by Le Tuan Anh <tuananh.ke@gmail.com>\n')
+		semcor_txt.write('# Latest version can be downloaded at https://github.com/letuananh/pysemcor\n')
+		semcor_txt.write('#\n')
+		all_files = [ os.path.join(XML_DIR, x) for x in os.listdir(XML_DIR) if os.path.isfile(os.path.join(XML_DIR, x)) ]
+		if only_multi_semcor:
+			all_files = [ x for x in all_files if os.path.splitext(os.path.basename(x))[0] in multi_semcor_aligned ]
+		print("Processing %s file(s) ..." % len(all_files))
+		for file_name in all_files:
+			convert_file(file_name, semcor_txt, semcor_raw, semcor_tag, semcor_tab)
 
 def sk_to_ss():
 	"""Update sensekey in tag file to synsetID (offset-pos)"""
