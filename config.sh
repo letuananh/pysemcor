@@ -43,3 +43,4 @@ pip install -r requirements.txt -qq
 
 link_folder `readlink -f ./modules/chirptext/chirptext` chirptext
 link_folder `readlink -f ./modules/puchikarui/puchikarui` puchikarui
+link_folder `readlink -f ./modules/yawlib/yawlib` yawlib

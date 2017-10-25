@@ -1,6 +1,6 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# from model import SemCorTXT, SemCorSQLite
+from .semcorxml import SemcorXML
+from .semcorxml import TokenInfo, FileSet
 
-# __all__ = ["SemCor"]
+__all__ = ["SemcorXML", "TokenInfo", "FileSet"]

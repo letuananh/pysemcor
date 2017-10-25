@@ -1,24 +1,24 @@
-pysemcor
+pySemcor - A library for processing Semcor with Python 
 ========
-
-A library for processing Semcor with Python 
 
 # Installation steps
 
-1. Create "workspace" folder in home folder (i.e. /home/{username}/workspace
-2. Clone pysemcor, beautifulsoup, ntlk  to this folder
-3. Run config.sh
-4. Run fixsemcor.py
+1. Create "workspace" folder in home folder (i.e. ~/workspace or /home/{username}/workspace)
+2. Clone pysemcor to this folder
+3. Run `config.sh`
+4. Run `./main.py fix` to fix 3rada dataset
+5. Run `./main.py json` to generate JSON dataset
+6. Run `./main.py ttl` to convert semcor XML to TTL (texttaglib) format
 
 Shell command for the above tasks
 
 ```
 mkdir ~/workspace
 cd ~/workspace
-git clone https://github.com/letuananh/beautifulsoup
 git clone https://github.com/letuananh/pysemcor
-git clone https://github.com/nltk/nltk
 cd pysemcor
 bash config.sh
-python3 fixsemcor.py all
+python3 main.py fix
+python3 main.py json
+python3 main.py ttl
 ```

@@ -56,12 +56,14 @@ from bs4 import BeautifulSoup
 from chirptext import FileHelper
 from chirptext.leutile import StringTool
 from chirptext.texttaglib import TaggedSentence
+from yawlib import WordnetSQL, YLConfig, SynsetID
 
 # -------------------------------------------------------------------------------
 # Configuration
 # -------------------------------------------------------------------------------
 
 logger = logging.getLogger(__name__)
+wn = WordnetSQL(YLConfig.WNSQL30_PATH)
 
 
 # -------------------------------------------------------------------------------
@@ -80,12 +82,19 @@ class TokenInfo:
     def __getitem__(self, key):
         return self.__data[key]
 
+    def get(self, key, default=None):
+        return self[key] if key in self else default
+
     def __setitem__(self, key, value):
         self.__data[key] = value
 
     @property
     def data(self):
         return self.__data.items()
+
+    @property
+    def lemma(self):
+        return self['lemma'] if 'lemma' in self else self.text
 
     def to_json(self):
         data = dict(self.__data)
@@ -191,16 +200,35 @@ class SemcorXML(object):
                     filename = 'n/a'
                     element.clear()
 
+    def iter_ttl(self, limit=None, with_nonsense=True):
+        sk_map = {}
+        # Convert sentence by sentence to TTL
+        with wn.schema.ctx() as wnctx:
+            for f in self.files[:limit] if limit else self.files:
+                for sj in self.iterparse(f):
+                    s = to_ttl(sj, with_nonsense=with_nonsense, sk_map=sk_map, wnctx=wnctx)
+                    yield s
+
+    def convert_to_ttl(self, ttlset, limit=None, with_nonsense=True):
+        sk_map = {}
+        with wn.schema.ctx() as wnctx:
+            for f in self.files[:limit] if limit else self.files:
+                xml2ttl(f, self, ttlset, with_nonsense=with_nonsense, sk_map=sk_map, wnctx=wnctx)
+
 
 # -------------------------------------------------------------------------------
 # Application logic
 # -------------------------------------------------------------------------------
 
-
 def xml2json(inpath, scxml, scjson):
     new_name = FileHelper.getfilename(inpath) + ".json"
     dir_name = os.path.dirname(inpath)
     outpath = scjson.abspath(os.path.join(dir_name, new_name))
+    if os.path.isfile(outpath):
+        print("SKIPPED: {} (output file exists)".format(outpath))
+        return
+    else:
+        print("Generating: {} => {}".format(inpath, outpath))
     dirpath = os.path.dirname(outpath)
     if not os.path.exists(dirpath):
         os.makedirs(dirpath)
@@ -211,7 +239,27 @@ def xml2json(inpath, scxml, scjson):
             outfile.write("\n")
 
 
-def to_ttl(sent):
+def xml2ttl(inpath, scxml, scttl, with_nonsense=True, sk_map=None, wnctx=None):
+    ''' convert all semcor files in XML format to ttl format '''
+    new_name = FileHelper.getfilename(inpath) + ".json"
+    dir_name = os.path.dirname(inpath)
+    outpath = scttl.abspath(os.path.join(dir_name, new_name))
+    if os.path.isfile(outpath):
+        print("SKIPPED: {} (output file exists)".format(outpath))
+        return
+    else:
+        print("Generating: {} => {}".format(inpath, outpath))
+    dirpath = os.path.dirname(outpath)
+    if not os.path.exists(dirpath):
+        os.makedirs(dirpath)
+    with open(outpath, 'wt') as outfile:
+        for sj in scxml.iterparse(inpath):
+            s = to_ttl(sj, with_nonsense=with_nonsense, sk_map=sk_map, wnctx=wnctx)
+            outfile.write(json.dumps(s.to_json()))
+            outfile.write("\n")
+
+
+def to_ttl(sent, with_nonsense=True, sk_map=None, wnctx=None):
     tokens = sent['tokens']
     text = detokenize(tokens)
     s = TaggedSentence(text=text, ID=sent['sid'])
@@ -219,7 +267,43 @@ def to_ttl(sent):
     for tinfo, tk in zip(tokens, s):
         for k, v in tinfo.data:
             tk.tag(label=v, tagtype=k)
+        # if sensekey exists, add it as a concept
+        lemma = tinfo.lemma
+        sk = fix_sensekey(tinfo.get('sk'))
+        rdf = tinfo.get('rdf')
+        if sk and (with_nonsense or not is_nonsense(lemma, sk, rdf)):
+            sensetag = sk
+            if sk_map is not None and sk in sk_map:
+                sensetag = sk_map[sk]
+            elif wnctx is not None:
+                # try to determine synsetID
+                ss = wnctx.senses.select_single('sensekey=?', (sk,))
+                if ss is not None:
+                    sid = str(SynsetID.from_string(ss.synsetid))
+                    if sk_map is not None:
+                        sk_map[sk] = sid
+                        sensetag = sid
+                else:
+                    # sensekey not found
+                    logger.warning("There is no synsetID with sensekey={} | rdf={}".format(sk, rdf))
+            s.add_concept(clemma=lemma, tag=sensetag, words=(tk,))
     return s
+
+
+KNOWN_KEYS = {"n't%4:02:00::": "not%4:02:00::"}
+
+
+def fix_sensekey(sk):
+    return KNOWN_KEYS[sk] if sk in KNOWN_KEYS else sk
+
+
+NONSENSE = [('person%1:03:00::', 'person'),
+            ('group%1:03:00::', 'group'),
+            ('location%1:03:00::', 'location')]
+
+
+def is_nonsense(lemma, sk, rdf):
+    return ((sk, rdf) in NONSENSE) or lemma == 'be'
 
 
 def fix_token_text(tk):
@@ -289,6 +373,9 @@ def fix_3rada(root, output_dir):
 
 
 def fix_malformed_xml_file(inpath, outpath):
+    if os.path.isfile(outpath):
+        print("SKIPPED: {} (output file exists)".format(outpath))
+        return
     print('Fixing the file: %s ==> %s' % (inpath, outpath))
     with open(inpath) as infile:
         soup = BeautifulSoup(infile.read(), 'lxml')

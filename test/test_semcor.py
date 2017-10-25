@@ -51,21 +51,26 @@ __credits__ = []
 
 import os
 import logging
-import json
 import unittest
 
+from chirptext import header
 from pysemcor.semcorxml import FileSet, SemcorXML
-from pysemcor.semcorxml import fix_3rada, detokenize, to_ttl, fix_token_text, xml2json
+from pysemcor.semcorxml import fix_3rada, fix_token_text, xml2json
+from pysemcor.miner import mine_rdf_values
+
 
 # -------------------------------------------------------------------------------
 # Configuration
 # -------------------------------------------------------------------------------
 
+logger = logging.getLogger(__name__)
 TEST_DIR = os.path.dirname(os.path.realpath(__file__))
 TEST_DATA = os.path.join(TEST_DIR, 'data')
 SEMCOR_ORIG = os.path.abspath('./data/3rada')
 SEMCOR_FIXED = os.path.abspath('./data/3rada_fixed')
 SEMCOR_JSON = os.path.abspath('./data/3rada_json')
+SEMCOR_TTL = os.path.abspath('./data/3rada_ttl')
+
 
 # -------------------------------------------------------------------------------
 # Test cases
@@ -86,32 +91,40 @@ class TestMain(unittest.TestCase):
         sc = SemcorXML(SEMCOR_ORIG)
         self.assertEqual(len(sc.files), 352)
 
+    def test_fix_token(self):
+        self.assertEqual(fix_token_text("Y ' all"), "Y'all")
+
+    def test_rdf(self):
+        sc = SemcorXML(SEMCOR_FIXED)
+        mine_rdf_values(sc, limit=1)
+
     def test_fix_3rada(self):
-        # fix_3rada(SEMCOR_ORIG, SEMCOR_FIXED)
-        pass
+        header("Test fix original 3rada dataset")
+        fix_3rada(SEMCOR_ORIG, SEMCOR_FIXED)
 
     def test_xml2json(self):
+        header("Test fixed 3rada to JSON")
         sc = SemcorXML(SEMCOR_FIXED)
         sc_json = FileSet(SEMCOR_JSON)
         for f in sc.files:
             xml2json(f, sc, sc_json)
 
-    def test_fix_token(self):
-        self.assertEqual(fix_token_text("Y ' all"), "Y'all")
-
     def test_parse_xml(self):
         sc = SemcorXML(SEMCOR_FIXED)
-        for f in sc.files[:2]:
-            for sj in sc.iterparse(f):
-                print(sj)
-                s = to_ttl(sj)
-                dump(s)
+        for s in sc.iter_ttl(limit=1, with_nonsense=False):
+            jttl = s.to_json()
+            self.assertTrue(s.text)
+            self.assertTrue(s.tokens)
+            self.assertIsNotNone(s.concepts)
+            if not s.concepts:
+                logger.warning("Nonsense sentence: {}".format(jttl))
 
+    def test_xml_to_ttl(self):
+        header("Test fixed 3rada to TTL format")
+        sc = SemcorXML(SEMCOR_FIXED)
+        scttl = FileSet(SEMCOR_TTL)
+        sc.convert_to_ttl(scttl, limit=1, with_nonsense=False)
 
-def dump(s):
-    print(s)
-    for t in s.tokens:
-        print("Token:", t, t.label, t.cfrom, t.cto, t.pos, t.lemma)
 
 # -------------------------------------------------------------------------------
 # Main method
