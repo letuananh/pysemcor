@@ -52,7 +52,7 @@ import logging
 import argparse
 
 from chirptext import Counter, TextReport, header
-from chirptext.texttaglib import TaggedDoc
+from chirptext import ttl
 from yawlib import SynsetID
 from pysemcor.semcorxml import fix_3rada, xml2json
 from pysemcor.semcorxml import FileSet, SemcorXML
@@ -93,13 +93,13 @@ def to_ttl(args):
 
 def list_unksense(args):
     header("List unknown sensekeys in Semcor")
-    ttl = SemcorXML(SEMCOR_TTL)
+    semxml = SemcorXML(SEMCOR_TTL)
     unk = Counter()
     sids = Counter()
     c = Counter()
     out = TextReport() if not args.out else TextReport(args.out)
-    for f in ttl.files[:args.limit] if args.limit else ttl.files:
-        doc = TaggedDoc.from_json_file(ttl.files.abspath(f))
+    for f in semxml.files[:args.limit] if args.limit else ttl.files:
+        doc = ttl.Document.from_json_file(ttl.files.abspath(f))
         for s in doc:
             for concept in s.concepts:
                 try:

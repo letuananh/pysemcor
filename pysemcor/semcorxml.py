@@ -55,15 +55,16 @@ from bs4 import BeautifulSoup
 
 from chirptext import FileHelper
 from chirptext.leutile import StringTool
-from chirptext.texttaglib import TaggedSentence
-from yawlib import WordnetSQL, YLConfig, SynsetID
+from chirptext import ttl
+from yawlib import SynsetID
+from yawlib.helpers import get_wn
 
 # -------------------------------------------------------------------------------
 # Configuration
 # -------------------------------------------------------------------------------
 
 logger = logging.getLogger(__name__)
-wn = WordnetSQL(YLConfig.WNSQL30_PATH)
+wn = get_wn()
 
 
 # -------------------------------------------------------------------------------
@@ -203,7 +204,7 @@ class SemcorXML(object):
     def iter_ttl(self, limit=None, with_nonsense=True):
         sk_map = {}
         # Convert sentence by sentence to TTL
-        with wn.schema.ctx() as wnctx:
+        with wn.ctx() as wnctx:
             for f in self.files[:limit] if limit else self.files:
                 for sj in self.iterparse(f):
                     s = to_ttl(sj, with_nonsense=with_nonsense, sk_map=sk_map, wnctx=wnctx)
@@ -211,7 +212,7 @@ class SemcorXML(object):
 
     def convert_to_ttl(self, ttlset, limit=None, with_nonsense=True):
         sk_map = {}
-        with wn.schema.ctx() as wnctx:
+        with wn.ctx() as wnctx:
             for f in self.files[:limit] if limit else self.files:
                 xml2ttl(f, self, ttlset, with_nonsense=with_nonsense, sk_map=sk_map, wnctx=wnctx)
 
@@ -262,11 +263,18 @@ def xml2ttl(inpath, scxml, scttl, with_nonsense=True, sk_map=None, wnctx=None):
 def to_ttl(sent, with_nonsense=True, sk_map=None, wnctx=None):
     tokens = sent['tokens']
     text = detokenize(tokens)
-    s = TaggedSentence(text=text, ID=sent['sid'])
+    s = ttl.Sentence(text=text, ident=sent['sid'])
     s.import_tokens((t.text for t in tokens))
     for tinfo, tk in zip(tokens, s):
         for k, v in tinfo.data:
-            tk.tag(label=v, tagtype=k)
+            if (k, v) == ('tag', 'wf') or k == 'sk':
+                continue
+            if k == 'lemma':
+                tk.lemma = v
+            elif k == 'pos':
+                tk.pos = v
+            else:
+                tk.new_tag(label=v, tagtype=k)
         # if sensekey exists, add it as a concept
         lemma = tinfo.lemma
         sk = fix_sensekey(tinfo.get('sk'))
@@ -286,7 +294,7 @@ def to_ttl(sent, with_nonsense=True, sk_map=None, wnctx=None):
                 else:
                     # sensekey not found
                     logger.warning("There is no synsetID with sensekey={} | rdf={}".format(sk, rdf))
-            s.add_concept(clemma=lemma, tag=sensetag, words=(tk,))
+            s.new_concept(clemma=lemma, tag=sensetag, tokens=(tk,))
     return s
 
 
