@@ -12,12 +12,18 @@ pySemcor - A library for processing Semcor with Python
 
 Shell command for the above tasks
 
-```
+```bash
+# Create workspace folder
 mkdir ~/workspace
 cd ~/workspace
+
+# Clone pysemcor from Github
 git clone https://github.com/letuananh/pysemcor
+
 cd pysemcor
 bash config.sh
+
+# Generate semcor dataset
 python3 main.py fix
 python3 main.py json
 python3 main.py ttl
