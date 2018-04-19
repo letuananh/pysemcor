@@ -63,8 +63,11 @@ from yawlib.helpers import get_wn
 # Configuration
 # -------------------------------------------------------------------------------
 
-logger = logging.getLogger(__name__)
 wn = get_wn()
+
+
+def getLogger():
+    return logging.getLogger(__name__)
 
 
 # -------------------------------------------------------------------------------
@@ -125,9 +128,12 @@ class FileSet(object):
 
     def add_all(self, path):
         folderpath = os.path.join(self.root, path)
-        files = FileHelper.get_child_files(folderpath)
-        for f in files:
-            self.add(os.path.join(path, f))
+        if not os.path.isdir(folderpath):
+            getLogger().warning("Folder {} does not exist".format(path))
+        else:
+            files = FileHelper.get_child_files(folderpath)
+            for f in files:
+                self.add(os.path.join(path, f))
 
     def add(self, path):
         self.__files.append(path)
@@ -149,6 +155,8 @@ class SemcorXML(object):
 
     def __init__(self, root):
         self.files = FileSet(root)
+        if not os.path.isdir(root):
+            getLogger().warning("Root {} does not exist".format(root))
         self.files.add_all('brown1/tagfiles')
         self.files.add_all('brown2/tagfiles')
         self.files.add_all('brownv/tagfiles')
@@ -256,14 +264,15 @@ def xml2ttl(inpath, scxml, scttl, with_nonsense=True, sk_map=None, wnctx=None):
     with open(outpath, 'wt') as outfile:
         for sj in scxml.iterparse(inpath):
             s = to_ttl(sj, with_nonsense=with_nonsense, sk_map=sk_map, wnctx=wnctx)
-            outfile.write(json.dumps(s.to_json()))
+            outfile.write(json.dumps(s.to_json(), ensure_ascii=False))
             outfile.write("\n")
 
 
 def to_ttl(sent, with_nonsense=True, sk_map=None, wnctx=None):
     tokens = sent['tokens']
     text = detokenize(tokens)
-    s = ttl.Sentence(text=text, ident=sent['sid'])
+    s = ttl.Sentence(text=text)
+    s.new_tag(sent['sid'], tagtype='origid')
     s.import_tokens((t.text for t in tokens))
     for tinfo, tk in zip(tokens, s):
         for k, v in tinfo.data:
@@ -279,6 +288,7 @@ def to_ttl(sent, with_nonsense=True, sk_map=None, wnctx=None):
         lemma = tinfo.lemma
         sk = fix_sensekey(tinfo.get('sk'))
         rdf = tinfo.get('rdf')
+        comment = None
         if sk and (with_nonsense or not is_nonsense(lemma, sk, rdf)):
             sensetag = sk
             if sk_map is not None and sk in sk_map:
@@ -293,8 +303,9 @@ def to_ttl(sent, with_nonsense=True, sk_map=None, wnctx=None):
                         sensetag = sid
                 else:
                     # sensekey not found
-                    logger.warning("There is no synsetID with sensekey={} | rdf={}".format(sk, rdf))
-            s.new_concept(clemma=lemma, tag=sensetag, tokens=(tk,))
+                    getLogger().warning("There is no synsetID with sensekey={} | rdf={}".format(sk, rdf))
+                    comment = 'sensekey'
+            s.new_concept(clemma=lemma, tag=sensetag, tokens=(tk,), comment=comment)
     return s
 
 
