@@ -79,10 +79,10 @@ def mine_rdf_values(sc, limit=None):
                 if 'ot' in t:
                     ot_values.add(t['ot'])
     header("RDF values")
-    for k, v in rdf_counter.sorted_by_count():
+    for k, v in rdf_counter.most_common():
         print("{}: {}".format(k, v))
     header("RDF values (with valid keys)")
-    for k, v in rdf_with_key_counter.sorted_by_count():
+    for k, v in rdf_with_key_counter.most_common():
         print("{}: {}".format(k, v))
     header("OT values")
     for o in ot_values:
